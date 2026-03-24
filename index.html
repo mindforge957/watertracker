@@ -1,0 +1,918 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Water Tracker 💧 — Stay Hydrated</title>
+  <meta name="description" content="Real-time water tracker with Supabase. Track your hydration and share live progress with friends." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    /* ============================== RESET ============================== */
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg-start: #0a1628;
+      --bg-mid: #0d2137;
+      --bg-end: #0f2b46;
+      --cyan: #00e5ff;
+      --blue: #2979ff;
+      --teal: #1de9b6;
+      --purple: #7c4dff;
+      --glass-bg: rgba(255,255,255,0.06);
+      --glass-border: rgba(255,255,255,0.12);
+      --text-1: #e8f4fd;
+      --text-2: rgba(232,244,253,0.6);
+      --text-a: #4dd0e1;
+      --track: rgba(255,255,255,0.08);
+      --glow: 0 0 40px rgba(0,229,255,0.15);
+      --r-lg: 24px; --r-md: 16px; --r-sm: 12px; --r-full: 9999px;
+      --font-h: 'Outfit','Inter',sans-serif;
+      --font-b: 'Inter',sans-serif;
+    }
+
+    html { font-size: 16px; -webkit-text-size-adjust: 100%; }
+
+    body {
+      font-family: var(--font-b);
+      background: linear-gradient(160deg, var(--bg-start) 0%, var(--bg-mid) 40%, var(--bg-end) 100%);
+      color: var(--text-1);
+      min-height: 100vh;
+      overflow-x: hidden;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    /* ============================== BACKGROUND ORBS ============================== */
+    .bg-orbs { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+    .bg-orbs .orb {
+      position: absolute; border-radius: 50%; filter: blur(80px); opacity: 0.25;
+      animation: orbF 20s ease-in-out infinite alternate;
+    }
+    .bg-orbs .orb:nth-child(1) { width: 400px; height: 400px; background: radial-gradient(circle,var(--cyan),transparent 70%); top: -10%; left: -5%; animation-duration: 25s; }
+    .bg-orbs .orb:nth-child(2) { width: 350px; height: 350px; background: radial-gradient(circle,var(--purple),transparent 70%); bottom: -10%; right: -5%; animation-duration: 30s; animation-delay: -5s; }
+    .bg-orbs .orb:nth-child(3) { width: 250px; height: 250px; background: radial-gradient(circle,var(--teal),transparent 70%); top: 50%; left: 50%; transform: translate(-50%,-50%); animation-duration: 22s; animation-delay: -10s; }
+    @keyframes orbF { 0%{transform:translate(0,0) scale(1)} 33%{transform:translate(30px,-40px) scale(1.1)} 66%{transform:translate(-20px,30px) scale(.95)} 100%{transform:translate(10px,-20px) scale(1.05)} }
+
+    /* ============================== BUBBLES ============================== */
+    .bubbles { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+    .bub {
+      position: absolute; border-radius: 50%;
+      background: radial-gradient(circle at 30% 30%,rgba(0,229,255,0.2),rgba(0,229,255,0.05) 60%,transparent 70%);
+      border: 1px solid rgba(0,229,255,0.1);
+      animation: bubR linear infinite;
+    }
+    @keyframes bubR { 0%{transform:translateY(100vh) translateX(0) scale(.3);opacity:0} 10%{opacity:.6} 90%{opacity:.4} 100%{transform:translateY(-100px) translateX(var(--drift)) scale(1);opacity:0} }
+
+    /* ============================== FX LAYERS ============================== */
+    .splash-layer, .confetti-layer { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
+    .splash-layer { z-index: 100; }
+    .confetti-layer { z-index: 99; }
+    .goal-glow-layer { position: fixed; inset: 0; z-index: 98; pointer-events: none; opacity: 0; background: radial-gradient(circle at 50% 40%,rgba(29,233,182,0.15),transparent 60%); transition: opacity 1s ease; }
+    .goal-glow-layer.on { opacity: 1; animation: glP 2s ease-in-out infinite; }
+    @keyframes glP { 0%,100%{opacity:.7} 50%{opacity:1} }
+
+    /* ============================== APP CONTAINER ============================== */
+    .app { position: relative; z-index: 1; width: 100%; max-width: 420px; min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 2rem 1.25rem; gap: 1.25rem; }
+
+    /* ============================== MODE SELECTION SCREEN ============================== */
+    .mode-screen {
+      position: fixed; inset: 0; z-index: 200;
+      background: linear-gradient(160deg, var(--bg-start), var(--bg-mid), var(--bg-end));
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 2rem; padding: 2rem;
+      transition: opacity 0.5s ease, transform 0.5s ease;
+    }
+    .mode-screen.hidden { opacity: 0; pointer-events: none; transform: scale(1.05); }
+    .mode-screen h1 {
+      font-family: var(--font-h); font-size: 2.2rem; font-weight: 800;
+      background: linear-gradient(135deg,var(--cyan),var(--teal),var(--blue));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+      text-align: center;
+    }
+    .mode-screen p { color: var(--text-2); text-align: center; max-width: 320px; line-height: 1.5; }
+    .mode-cards { display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center; }
+    .mode-card {
+      width: 160px; padding: 1.5rem 1rem; border-radius: var(--r-lg);
+      background: var(--glass-bg); border: 1px solid var(--glass-border);
+      backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+      text-align: center; cursor: pointer;
+      transition: all 0.3s cubic-bezier(0.34,1.56,0.64,1);
+      display: flex; flex-direction: column; align-items: center; gap: 0.75rem;
+    }
+    .mode-card:hover { transform: translateY(-6px) scale(1.03); border-color: rgba(0,229,255,0.4); box-shadow: 0 0 30px rgba(0,229,255,0.15); }
+    .mode-card .icon { font-size: 2.5rem; }
+    .mode-card .label { font-family: var(--font-h); font-weight: 700; font-size: 1rem; color: var(--text-1); }
+    .mode-card .desc { font-size: 0.75rem; color: var(--text-2); line-height: 1.3; }
+
+    /* Viewer ID input */
+    .viewer-input-area {
+      display: none; flex-direction: column; align-items: center; gap: 1rem;
+      width: 100%; max-width: 320px;
+    }
+    .viewer-input-area.show { display: flex; }
+    .viewer-input-area label { font-size: 0.85rem; color: var(--text-2); }
+    .viewer-input-area input {
+      width: 100%; padding: 0.8rem 1rem; border-radius: var(--r-sm);
+      border: 1px solid var(--glass-border); background: var(--glass-bg);
+      color: var(--text-1); font-family: var(--font-b); font-size: 1rem;
+      outline: none; text-align: center; letter-spacing: 1px;
+      transition: border-color 0.3s ease;
+    }
+    .viewer-input-area input:focus { border-color: var(--cyan); }
+    .viewer-input-area input::placeholder { color: var(--text-2); }
+    .btn-connect {
+      padding: 0.7rem 2rem; border-radius: var(--r-full); border: none; cursor: pointer;
+      background: linear-gradient(135deg, var(--cyan), var(--teal));
+      color: var(--bg-start); font-family: var(--font-h); font-weight: 700; font-size: 0.9rem;
+      transition: transform 0.2s ease, box-shadow 0.3s ease;
+    }
+    .btn-connect:hover { transform: scale(1.05); box-shadow: 0 0 20px rgba(0,229,255,0.3); }
+    .btn-connect:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+    .error-msg { color: #ff5252; font-size: 0.8rem; min-height: 1rem; }
+
+    /* ============================== HEADER ============================== */
+    .header { text-align: center; padding-top: 0.5rem; }
+    .header h1 {
+      font-family: var(--font-h); font-size: 2rem; font-weight: 800;
+      background: linear-gradient(135deg,var(--cyan),var(--teal),var(--blue));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+      letter-spacing: -0.5px;
+    }
+    .header .subtitle { font-size: 0.9rem; color: var(--text-2); margin-top: 0.25rem; }
+
+    /* Mode badge */
+    .mode-badge {
+      display: inline-flex; align-items: center; gap: 0.4rem;
+      margin-top: 0.5rem; padding: 0.3rem 0.8rem; border-radius: var(--r-full);
+      font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;
+    }
+    .mode-badge.tracker { background: rgba(0,229,255,0.12); color: var(--cyan); border: 1px solid rgba(0,229,255,0.25); }
+    .mode-badge.viewer { background: rgba(124,77,255,0.12); color: #b388ff; border: 1px solid rgba(124,77,255,0.25); }
+    .mode-badge .dot { width: 6px; height: 6px; border-radius: 50%; animation: pulse 2s ease-in-out infinite; }
+    .mode-badge.tracker .dot { background: var(--cyan); }
+    .mode-badge.viewer .dot { background: #b388ff; }
+    @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.4;transform:scale(.8)} }
+
+    /* User ID display */
+    .user-id-bar {
+      width: 100%; text-align: center; padding: 0.5rem 1rem;
+      border-radius: var(--r-sm); background: var(--glass-bg); border: 1px solid var(--glass-border);
+      font-size: 0.75rem; color: var(--text-2);
+    }
+    .user-id-bar code { color: var(--cyan); font-weight: 600; font-size: 0.8rem; letter-spacing: 0.5px; cursor: pointer; }
+    .user-id-bar code:hover { text-decoration: underline; }
+    .copy-toast {
+      position: fixed; bottom: 2rem; left: 50%; transform: translateX(-50%) translateY(20px);
+      padding: 0.6rem 1.2rem; border-radius: var(--r-full);
+      background: var(--teal); color: var(--bg-start); font-size: 0.8rem; font-weight: 600;
+      opacity: 0; pointer-events: none; transition: all 0.3s ease; z-index: 300;
+    }
+    .copy-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    /* ============================== CARD ============================== */
+    .card {
+      width: 100%; background: var(--glass-bg); border: 1px solid var(--glass-border);
+      border-radius: var(--r-lg); padding: 2rem 1.5rem;
+      backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+      box-shadow: var(--glow); transition: box-shadow 0.5s ease;
+    }
+
+    /* ============================== GLASS BUTTON ============================== */
+    .glass-area { display: flex; flex-direction: column; align-items: center; gap: 1rem; position: relative; }
+    .glass-btn {
+      position: relative; width: 140px; height: 140px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; border: 2px solid rgba(0,229,255,0.2);
+      background: linear-gradient(145deg,rgba(0,229,255,0.12),rgba(0,229,255,0.04));
+      box-shadow: 0 0 30px rgba(0,229,255,0.1), inset 0 0 30px rgba(0,229,255,0.05);
+      animation: agFloat 4s ease-in-out infinite;
+      transition: transform 0.15s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.3s ease, border-color 0.3s ease;
+      -webkit-tap-highlight-color: transparent; outline: none; user-select: none;
+    }
+    .glass-btn:hover { border-color: rgba(0,229,255,0.4); box-shadow: 0 0 50px rgba(0,229,255,0.2), inset 0 0 40px rgba(0,229,255,0.08); }
+    .glass-btn:active { transform: scale(0.9); }
+    .glass-btn.bounce { animation: bClick 0.5s cubic-bezier(0.34,1.56,0.64,1); }
+    .glass-btn.done { border-color: rgba(29,233,182,0.4); box-shadow: 0 0 50px rgba(29,233,182,0.2), inset 0 0 40px rgba(29,233,182,0.08); cursor: default; }
+    .glass-btn.view-only { pointer-events: none; }
+    @keyframes agFloat { 0%,100%{transform:translateY(0)} 25%{transform:translateY(-8px) rotate(1deg)} 50%{transform:translateY(-4px)} 75%{transform:translateY(-10px) rotate(-1deg)} }
+    @keyframes bClick { 0%{transform:scale(.85)} 40%{transform:scale(1.15)} 60%{transform:scale(.95)} 80%{transform:scale(1.05)} 100%{transform:scale(1)} }
+
+    .glass-svg { width: 68px; height: 68px; filter: drop-shadow(0 0 12px rgba(0,229,255,0.4)); transition: filter 0.3s ease; }
+    .glass-btn:hover .glass-svg { filter: drop-shadow(0 0 20px rgba(0,229,255,0.6)); }
+
+    .ring-pulse {
+      position: absolute; width: 140px; height: 140px; border-radius: 50%;
+      border: 2px solid rgba(0,229,255,0.15); animation: ringEx 3s ease-out infinite; pointer-events: none;
+    }
+    .ring-pulse:nth-child(2) { animation-delay: 1s; }
+    .ring-pulse:nth-child(3) { animation-delay: 2s; }
+    @keyframes ringEx { 0%{transform:scale(1);opacity:.5} 100%{transform:scale(1.8);opacity:0} }
+
+    .tap-hint { font-size: 0.8rem; color: var(--text-2); letter-spacing: 0.5px; text-transform: uppercase; font-weight: 500; }
+
+    /* ============================== COUNT ============================== */
+    .count-display { text-align: center; }
+    .count-number {
+      font-family: var(--font-h); font-size: 3.5rem; font-weight: 800;
+      background: linear-gradient(135deg,var(--cyan),var(--teal));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+      line-height: 1.1; transition: transform 0.3s cubic-bezier(0.34,1.56,0.64,1);
+    }
+    .count-number.pop { animation: popN 0.4s cubic-bezier(0.34,1.56,0.64,1); }
+    @keyframes popN { 0%{transform:scale(1)} 50%{transform:scale(1.3)} 100%{transform:scale(1)} }
+    .count-label { font-size: 0.9rem; color: var(--text-2); margin-top: 0.2rem; }
+    .count-label span { color: var(--text-a); font-weight: 600; }
+
+    /* ============================== PROGRESS ============================== */
+    .progress-section { width: 100%; }
+    .progress-track { width: 100%; height: 14px; background: var(--track); border-radius: var(--r-full); overflow: hidden; }
+    .progress-fill {
+      height: 100%; width: 0%; border-radius: var(--r-full);
+      background: linear-gradient(90deg,var(--blue),var(--cyan),var(--teal));
+      background-size: 200% 100%; animation: gShift 3s ease infinite;
+      transition: width 0.6s cubic-bezier(0.34,1.56,0.64,1); position: relative;
+    }
+    .progress-fill::after {
+      content: ''; position: absolute; right: 0; top: 0; width: 30px; height: 100%;
+      background: linear-gradient(90deg,transparent,rgba(255,255,255,0.3));
+      border-radius: var(--r-full); filter: blur(2px);
+    }
+    @keyframes gShift { 0%,100%{background-position:0% 50%} 50%{background-position:100% 50%} }
+    .progress-labels { display: flex; justify-content: space-between; font-size: 0.78rem; color: var(--text-2); margin-top: 0.5rem; font-weight: 500; }
+
+    /* ============================== GLASS TRAY ============================== */
+    .glass-tray { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.5rem; padding: 0.5rem 0; }
+    .mini-glass {
+      width: 28px; height: 28px; border-radius: 8px;
+      border: 1.5px solid rgba(0,229,255,0.15); background: rgba(0,229,255,0.04);
+      display: flex; align-items: center; justify-content: center; font-size: 0.7rem;
+      transition: all 0.4s cubic-bezier(0.34,1.56,0.64,1); opacity: 0.4;
+    }
+    .mini-glass.filled {
+      background: linear-gradient(135deg,rgba(0,229,255,0.2),rgba(29,233,182,0.15));
+      border-color: rgba(0,229,255,0.35); opacity: 1; box-shadow: 0 0 10px rgba(0,229,255,0.15);
+    }
+
+    /* ============================== MESSAGE ============================== */
+    .msg-box {
+      width: 100%; text-align: center; padding: 1rem; border-radius: var(--r-md);
+      background: rgba(0,229,255,0.06); border: 1px solid rgba(0,229,255,0.1); transition: all 0.5s ease;
+    }
+    .msg-box .msg-text { font-size: 1.05rem; font-weight: 600; line-height: 1.4; }
+    .msg-box.complete { background: rgba(29,233,182,0.1); border-color: rgba(29,233,182,0.25); box-shadow: 0 0 30px rgba(29,233,182,0.1); }
+
+    /* ============================== SYNCING INDICATOR ============================== */
+    .sync-bar {
+      display: flex; align-items: center; justify-content: center; gap: 0.4rem;
+      font-size: 0.7rem; color: var(--text-2); padding: 0.25rem 0;
+    }
+    .sync-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--teal); animation: pulse 1.5s ease-in-out infinite; }
+    .sync-bar.error .sync-dot { background: #ff5252; }
+    .sync-bar.error { color: #ff8a80; }
+
+    /* ============================== SPLASH ============================== */
+    .splash-p {
+      position: absolute; border-radius: 50%; pointer-events: none;
+      animation: sFly 0.8s cubic-bezier(0.25,0.46,0.45,0.94) forwards;
+    }
+    @keyframes sFly { 0%{transform:translate(0,0) scale(1);opacity:1} 100%{transform:translate(var(--dx),var(--dy)) scale(0);opacity:0} }
+    .ripple-fx {
+      position: absolute; border-radius: 50%; border: 2px solid rgba(0,229,255,0.4);
+      animation: rEx 0.8s ease-out forwards; pointer-events: none;
+    }
+    @keyframes rEx { 0%{width:0;height:0;opacity:1} 100%{width:200px;height:200px;opacity:0} }
+    .plus-one {
+      position: absolute; font-family: var(--font-h); font-size: 1.5rem; font-weight: 800;
+      color: var(--cyan); pointer-events: none; animation: fUp 1s ease-out forwards; z-index: 101;
+      text-shadow: 0 0 15px rgba(0,229,255,0.5);
+    }
+    @keyframes fUp { 0%{opacity:1;transform:translateY(0) scale(1)} 100%{opacity:0;transform:translateY(-80px) scale(1.3)} }
+
+    /* ============================== CONFETTI ============================== */
+    .conf-p {
+      position: absolute; top: -20px;
+      animation: cFall var(--dur) cubic-bezier(0.25,0.46,0.45,0.94) forwards;
+    }
+    @keyframes cFall { 0%{transform:translateY(0) rotate(0) scale(1);opacity:1} 80%{opacity:1} 100%{transform:translateY(100vh) rotate(var(--rot)) scale(.5);opacity:0} }
+
+    /* ============================== FOOTER ============================== */
+    .footer { margin-top: auto; text-align: center; padding: 1.5rem 0 1rem; font-size: 0.75rem; color: var(--text-2); opacity: 0.5; }
+
+    /* ============================== BACK BUTTON ============================== */
+    .back-btn {
+      position: fixed; top: 1rem; left: 1rem; z-index: 50;
+      width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--glass-border);
+      background: var(--glass-bg); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+      color: var(--text-2); font-size: 1rem; cursor: pointer; display: flex; align-items: center; justify-content: center;
+      transition: all 0.3s ease; -webkit-tap-highlight-color: transparent;
+    }
+    .back-btn:hover { background: var(--glass-border); color: var(--text-1); }
+
+    /* ============================== RESPONSIVE ============================== */
+    @media (max-width: 380px) {
+      .header h1 { font-size: 1.6rem; }
+      .count-number { font-size: 2.8rem; }
+      .glass-btn { width: 120px; height: 120px; }
+      .glass-svg { width: 56px; height: 56px; }
+      .ring-pulse { width: 120px; height: 120px; }
+      .mode-card { width: 140px; padding: 1.25rem 0.75rem; }
+    }
+    @media (min-width: 768px) {
+      .app { padding: 3rem 2rem; gap: 2rem; }
+      .header h1 { font-size: 2.5rem; }
+      .count-number { font-size: 4rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Background layers -->
+  <div class="bg-orbs"><div class="orb"></div><div class="orb"></div><div class="orb"></div></div>
+  <div class="bubbles" id="bubbles"></div>
+  <div class="splash-layer" id="splashLayer"></div>
+  <div class="confetti-layer" id="confettiLayer"></div>
+  <div class="goal-glow-layer" id="goalGlow"></div>
+  <div class="copy-toast" id="copyToast">Copied!</div>
+
+  <!-- ==================== MODE SELECTION ==================== -->
+  <div class="mode-screen" id="modeScreen">
+    <h1>Water Tracker 💧</h1>
+    <p>Track your hydration in real-time. Choose your mode to begin.</p>
+
+    <div class="mode-cards" id="modeCards">
+      <div class="mode-card" id="pickTracker">
+        <div class="icon">🥛</div>
+        <div class="label">Tracker</div>
+        <div class="desc">Tap to log each glass of water you drink</div>
+      </div>
+      <div class="mode-card" id="pickViewer">
+        <div class="icon">📡</div>
+        <div class="label">Viewer</div>
+        <div class="desc">Watch someone's progress update live</div>
+      </div>
+    </div>
+
+    <div class="viewer-input-area" id="viewerInput">
+      <label>Enter the Tracker's User ID</label>
+      <input type="text" id="viewerIdInput" placeholder="e.g. W-A3F82K" maxlength="10" autocomplete="off" spellcheck="false" />
+      <button class="btn-connect" id="btnConnect">Connect Live</button>
+      <div class="error-msg" id="viewerError"></div>
+    </div>
+  </div>
+
+  <!-- ==================== MAIN APP ==================== -->
+  <button class="back-btn" id="backBtn" title="Back to mode selection" style="display:none;">←</button>
+
+  <div class="app" id="mainApp" style="display:none;">
+    <header class="header">
+      <h1>Water Tracker 💧</h1>
+      <p class="subtitle">Stay Hydrated ❤️</p>
+      <div class="mode-badge tracker" id="modeBadge"><span class="dot"></span> Tracker</div>
+    </header>
+
+    <div class="user-id-bar" id="userIdBar">
+      Your ID: <code id="userIdDisplay" title="Click to copy">—</code>
+    </div>
+
+    <div class="sync-bar" id="syncBar"><span class="sync-dot"></span> Connected to Supabase</div>
+
+    <!-- Glass button -->
+    <div class="card glass-area" id="mainCard">
+      <div class="ring-pulse"></div>
+      <div class="ring-pulse"></div>
+      <div class="ring-pulse"></div>
+      <button class="glass-btn" id="glassBtn" aria-label="Add a glass of water">
+        <svg class="glass-svg" viewBox="0 0 64 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M10 8C10 4,14 2,18 2L46 2C50 2,54 4,54 8L50 66C49 72,45 76,38 76L26 76C19 76,15 72,14 66Z" stroke="rgba(0,229,255,0.7)" stroke-width="2.5" fill="rgba(0,229,255,0.06)"/>
+          <clipPath id="wClip"><path d="M12 12L52 12L49 66C48 71,45 74,38 74L26 74C19 74,16 71,15 66Z"/></clipPath>
+          <rect id="waterFill" x="10" y="74" width="44" height="72" fill="url(#wGrad)" clip-path="url(#wClip)" style="transition:y 0.6s cubic-bezier(0.34,1.56,0.64,1);"/>
+          <defs><linearGradient id="wGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="rgba(0,229,255,0.5)"/><stop offset="100%" stop-color="rgba(29,233,182,0.3)"/></linearGradient></defs>
+          <path d="M18 10L20 40" stroke="rgba(255,255,255,0.15)" stroke-width="2" stroke-linecap="round"/>
+          <path d="M22 8L23 25" stroke="rgba(255,255,255,0.1)" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+      </button>
+      <span class="tap-hint" id="tapHint">Tap to drink</span>
+    </div>
+
+    <!-- Count -->
+    <div class="count-display">
+      <div class="count-number" id="countNum">0</div>
+      <div class="count-label">Glasses Drunk Today: <span id="countFrac">0 / 12</span></div>
+    </div>
+
+    <!-- Progress -->
+    <div class="card progress-section">
+      <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+      <div class="progress-labels"><span>Progress</span><span id="progressPct">0%</span></div>
+    </div>
+
+    <!-- Tray -->
+    <div class="card"><div class="glass-tray" id="glassTray"></div></div>
+
+    <!-- Message -->
+    <div class="msg-box" id="msgBox"><div class="msg-text" id="msgText">Let's get started 💧</div></div>
+
+    <footer class="footer">Water Tracker 💧 · Real-time powered by Supabase</footer>
+  </div>
+
+  <!-- ==================== SUPABASE + APP LOGIC ==================== -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script>
+    /* =================================================================
+       CONFIGURATION — Replace with your Supabase project credentials
+       ================================================================= */
+    const SUPABASE_URL  = 'https://bhpwrpyplkmwzschbvvt.supabase.co';
+    const SUPABASE_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJocHdycHlwbGttd3pzY2hidnZ0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzMzg1MjQsImV4cCI6MjA4OTkxNDUyNH0.0NUVA6Xj0EgHudBwmOAxuHkl2CZmn60nAQc40GBmdJc';
+
+    const DAILY_GOAL = 12;
+    const LS_UID_KEY = 'waterTracker_userId';
+
+    /* =================================================================
+       SUPABASE CLIENT
+       ================================================================= */
+    const { createClient } = supabase;
+    let sb = null;
+    let realtimeChannel = null;
+
+    function initSupabase() {
+      if (SUPABASE_URL === 'YOUR_SUPABASE_URL' || SUPABASE_KEY === 'YOUR_SUPABASE_ANON_KEY') {
+        console.warn('⚠️ Supabase credentials not set. Running in offline/demo mode.');
+        return false;
+      }
+      try {
+        sb = createClient(SUPABASE_URL, SUPABASE_KEY);
+        return true;
+      } catch (e) {
+        console.error('Supabase init error:', e);
+        return false;
+      }
+    }
+
+    const supabaseReady = initSupabase();
+
+    /* =================================================================
+       HELPERS
+       ================================================================= */
+    function todayStr() {
+      const d = new Date();
+      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    }
+
+    function generateId() {
+      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+      let id = 'W-';
+      for (let i = 0; i < 6; i++) id += chars[Math.floor(Math.random() * chars.length)];
+      return id;
+    }
+
+    function getUserId() {
+      let uid = localStorage.getItem(LS_UID_KEY);
+      if (!uid) { uid = generateId(); localStorage.setItem(LS_UID_KEY, uid); }
+      return uid;
+    }
+
+    /* =================================================================
+       DOM REFS
+       ================================================================= */
+    const $ = id => document.getElementById(id);
+    const modeScreen   = $('modeScreen');
+    const modeCards     = $('modeCards');
+    const pickTracker   = $('pickTracker');
+    const pickViewer    = $('pickViewer');
+    const viewerInput   = $('viewerInput');
+    const viewerIdInput = $('viewerIdInput');
+    const btnConnect    = $('btnConnect');
+    const viewerError   = $('viewerError');
+    const mainApp       = $('mainApp');
+    const backBtn       = $('backBtn');
+    const modeBadge     = $('modeBadge');
+    const userIdBar     = $('userIdBar');
+    const userIdDisplay = $('userIdDisplay');
+    const syncBar       = $('syncBar');
+    const glassBtn      = $('glassBtn');
+    const tapHint       = $('tapHint');
+    const countNum      = $('countNum');
+    const countFrac     = $('countFrac');
+    const progressFill  = $('progressFill');
+    const progressPct   = $('progressPct');
+    const glassTray     = $('glassTray');
+    const msgBox        = $('msgBox');
+    const msgText       = $('msgText');
+    const splashLayer   = $('splashLayer');
+    const confettiLayer = $('confettiLayer');
+    const goalGlow      = $('goalGlow');
+    const waterFill     = $('waterFill');
+    const copyToast     = $('copyToast');
+
+    /* =================================================================
+       STATE
+       ================================================================= */
+    let mode = null;       // 'tracker' | 'viewer'
+    let userId = null;     // tracked user ID
+    let count = 0;
+    let clicking = false;  // debounce
+
+    /* =================================================================
+       MODE SELECTION
+       ================================================================= */
+    pickTracker.addEventListener('click', () => {
+      mode = 'tracker';
+      userId = getUserId();
+      enterApp();
+    });
+
+    pickViewer.addEventListener('click', () => {
+      modeCards.style.display = 'none';
+      viewerInput.classList.add('show');
+      viewerIdInput.focus();
+    });
+
+    btnConnect.addEventListener('click', connectViewer);
+    viewerIdInput.addEventListener('keydown', e => { if (e.key === 'Enter') connectViewer(); });
+
+    async function connectViewer() {
+      const val = viewerIdInput.value.trim().toUpperCase();
+      if (!val) { viewerError.textContent = 'Please enter a User ID'; return; }
+      viewerError.textContent = '';
+      btnConnect.disabled = true;
+      btnConnect.textContent = 'Connecting…';
+
+      if (supabaseReady) {
+        // Check if user exists in DB for today
+        const { data, error } = await sb
+          .from('water_log')
+          .select('count')
+          .eq('user_id', val)
+          .eq('log_date', todayStr())
+          .maybeSingle();
+
+        if (error) {
+          viewerError.textContent = 'Connection error. Check your Supabase setup.';
+          btnConnect.disabled = false;
+          btnConnect.textContent = 'Connect Live';
+          return;
+        }
+        count = data ? data.count : 0;
+      }
+
+      mode = 'viewer';
+      userId = val;
+      btnConnect.disabled = false;
+      btnConnect.textContent = 'Connect Live';
+      enterApp();
+    }
+
+    function enterApp() {
+      // Hide mode screen
+      modeScreen.classList.add('hidden');
+      setTimeout(() => { modeScreen.style.display = 'none'; }, 500);
+
+      // Show main app
+      mainApp.style.display = 'flex';
+      backBtn.style.display = 'flex';
+
+      // Configure mode
+      if (mode === 'tracker') {
+        modeBadge.className = 'mode-badge tracker';
+        modeBadge.innerHTML = '<span class="dot"></span> Tracker';
+        userIdDisplay.textContent = userId;
+        tapHint.textContent = 'Tap to drink';
+      } else {
+        modeBadge.className = 'mode-badge viewer';
+        modeBadge.innerHTML = '<span class="dot"></span> Viewer — Live';
+        userIdDisplay.textContent = userId;
+        userIdBar.querySelector('code').previousSibling.textContent = 'Watching: ';
+        glassBtn.classList.add('view-only');
+        tapHint.textContent = 'Watching live…';
+      }
+
+      initTray();
+      updateUI(false);
+      loadFromSupabase();
+      subscribeRealtime();
+      startMidnightCheck();
+    }
+
+    // Back button
+    backBtn.addEventListener('click', () => {
+      // Unsubscribe
+      if (realtimeChannel) { sb?.removeChannel(realtimeChannel); realtimeChannel = null; }
+      // Reset UI
+      mainApp.style.display = 'none';
+      backBtn.style.display = 'none';
+      modeScreen.style.display = 'flex';
+      modeScreen.classList.remove('hidden');
+      modeCards.style.display = 'flex';
+      viewerInput.classList.remove('show');
+      viewerError.textContent = '';
+      viewerIdInput.value = '';
+      glassBtn.classList.remove('view-only', 'done');
+      goalGlow.classList.remove('on');
+      count = 0;
+      mode = null;
+    });
+
+    // Copy user ID
+    userIdDisplay.addEventListener('click', () => {
+      navigator.clipboard.writeText(userIdDisplay.textContent).then(() => {
+        copyToast.classList.add('show');
+        setTimeout(() => copyToast.classList.remove('show'), 1500);
+      });
+    });
+
+    /* =================================================================
+       SUPABASE — LOAD / UPSERT / SUBSCRIBE
+       ================================================================= */
+    async function loadFromSupabase() {
+      if (!supabaseReady) {
+        // Demo fallback to localStorage
+        try {
+          const raw = localStorage.getItem('waterTracker_demo');
+          if (raw) { const d = JSON.parse(raw); if (d.date === todayStr() && d.uid === userId) count = d.count; else count = 0; }
+        } catch {}
+        updateUI(false);
+        setSyncStatus('demo');
+        return;
+      }
+
+      setSyncStatus('loading');
+      const { data, error } = await sb
+        .from('water_log')
+        .select('count')
+        .eq('user_id', userId)
+        .eq('log_date', todayStr())
+        .maybeSingle();
+
+      if (error) { setSyncStatus('error'); return; }
+      count = data ? data.count : 0;
+      updateUI(false);
+      setSyncStatus('connected');
+    }
+
+    async function upsertCount() {
+      if (!supabaseReady) {
+        // Demo fallback
+        localStorage.setItem('waterTracker_demo', JSON.stringify({ uid: userId, date: todayStr(), count }));
+        return;
+      }
+
+      const { error } = await sb
+        .from('water_log')
+        .upsert({
+          user_id: userId,
+          log_date: todayStr(),
+          count: count,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'user_id,log_date' });
+
+      if (error) { console.error('Upsert error:', error); setSyncStatus('error'); }
+    }
+
+    function subscribeRealtime() {
+      if (!supabaseReady) return;
+
+      realtimeChannel = sb
+        .channel('water-realtime-' + userId)
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'water_log',
+            filter: `user_id=eq.${userId}`
+          },
+          (payload) => {
+            const row = payload.new;
+            if (row && row.log_date === todayStr()) {
+              const oldCount = count;
+              count = row.count;
+              updateUI(count > oldCount);
+              if (count >= DAILY_GOAL && oldCount < DAILY_GOAL) {
+                setTimeout(() => { triggerConfetti(); goalGlow.classList.add('on'); }, 300);
+              }
+            }
+          }
+        )
+        .subscribe((status) => {
+          if (status === 'SUBSCRIBED') setSyncStatus('connected');
+          else if (status === 'CHANNEL_ERROR') setSyncStatus('error');
+        });
+    }
+
+    function setSyncStatus(s) {
+      if (s === 'connected') {
+        syncBar.className = 'sync-bar';
+        syncBar.innerHTML = '<span class="sync-dot"></span> Connected to Supabase';
+      } else if (s === 'error') {
+        syncBar.className = 'sync-bar error';
+        syncBar.innerHTML = '<span class="sync-dot"></span> Connection error — retrying…';
+      } else if (s === 'loading') {
+        syncBar.className = 'sync-bar';
+        syncBar.innerHTML = '<span class="sync-dot"></span> Loading…';
+      } else if (s === 'demo') {
+        syncBar.className = 'sync-bar';
+        syncBar.innerHTML = '<span class="sync-dot" style="background:#ffab40"></span> Demo mode (no Supabase)';
+      }
+    }
+
+    /* =================================================================
+       CLICK HANDLER (TRACKER ONLY)
+       ================================================================= */
+    glassBtn.addEventListener('click', async (e) => {
+      if (mode !== 'tracker' || count >= DAILY_GOAL || clicking) return;
+
+      clicking = true;
+      count++;
+
+      const rect = glassBtn.getBoundingClientRect();
+      const cx = e.clientX || (rect.left + rect.width / 2);
+      const cy = e.clientY || (rect.top + rect.height / 2);
+
+      createSplash(cx, cy);
+      showPlusOne(cx, cy);
+      playClickSound();
+      updateUI(true);
+
+      await upsertCount();
+
+      if (count >= DAILY_GOAL) {
+        setTimeout(() => { triggerConfetti(); goalGlow.classList.add('on'); }, 300);
+      }
+
+      clicking = false;
+    });
+
+    /* =================================================================
+       UI UPDATE
+       ================================================================= */
+    function initTray() {
+      glassTray.innerHTML = '';
+      for (let i = 0; i < DAILY_GOAL; i++) {
+        const el = document.createElement('div');
+        el.className = 'mini-glass';
+        el.innerHTML = '<span>💧</span>';
+        glassTray.appendChild(el);
+      }
+    }
+
+    function getMessage(c) {
+      if (c <= 0) return "Let's get started 💧";
+      if (c <= 4) return "Let's get started 💧";
+      if (c <= 8) return "Good job, keep going 💙";
+      if (c <= 11) return "Almost there! 🔥";
+      return "Goal achieved! 🎉 Stay amazing ❤️";
+    }
+
+    function updateUI(animate) {
+      countNum.textContent = count;
+      countFrac.textContent = `${count} / ${DAILY_GOAL}`;
+
+      const pct = Math.min((count / DAILY_GOAL) * 100, 100);
+      progressFill.style.width = pct + '%';
+      progressPct.textContent = Math.round(pct) + '%';
+
+      // SVG water fill — y from 74 (empty) to 12 (full)
+      waterFill.setAttribute('y', 74 - (pct / 100) * 62);
+
+      msgText.textContent = getMessage(count);
+
+      if (count >= DAILY_GOAL) {
+        msgBox.classList.add('complete');
+        glassBtn.classList.add('done');
+        if (mode === 'tracker') tapHint.textContent = '🎉 Goal reached!';
+      } else {
+        msgBox.classList.remove('complete');
+        glassBtn.classList.remove('done');
+        if (mode === 'tracker') tapHint.textContent = 'Tap to drink';
+      }
+
+      // Tray
+      const kids = glassTray.children;
+      for (let i = 0; i < DAILY_GOAL; i++) {
+        kids[i].classList.toggle('filled', i < count);
+      }
+
+      if (animate) {
+        countNum.classList.remove('pop');  void countNum.offsetWidth;  countNum.classList.add('pop');
+        glassBtn.classList.remove('bounce'); void glassBtn.offsetWidth; glassBtn.classList.add('bounce');
+      }
+    }
+
+    /* =================================================================
+       SPLASH PARTICLES
+       ================================================================= */
+    function createSplash(x, y) {
+      const colors = ['#00e5ff','#1de9b6','#2979ff','#4dd0e1','#80deea'];
+      for (let i = 0; i < 14; i++) {
+        const p = document.createElement('div');
+        p.className = 'splash-p';
+        const sz = Math.random() * 8 + 4;
+        const ang = (Math.PI * 2 * i) / 14 + (Math.random() - 0.5) * 0.5;
+        const dist = Math.random() * 80 + 40;
+        const dx = Math.cos(ang) * dist, dy = Math.sin(ang) * dist - Math.random() * 30;
+        const c = colors[Math.floor(Math.random() * colors.length)];
+        p.style.cssText = `left:${x-sz/2}px;top:${y-sz/2}px;width:${sz}px;height:${sz}px;background:${c};--dx:${dx}px;--dy:${dy}px;box-shadow:0 0 6px ${c};`;
+        splashLayer.appendChild(p);
+        setTimeout(() => p.remove(), 900);
+      }
+      const rip = document.createElement('div');
+      rip.className = 'ripple-fx';
+      rip.style.left = x - 100 + 'px'; rip.style.top = y - 100 + 'px';
+      splashLayer.appendChild(rip);
+      setTimeout(() => rip.remove(), 900);
+    }
+
+    function showPlusOne(x, y) {
+      const el = document.createElement('div');
+      el.className = 'plus-one';
+      el.textContent = '+1';
+      el.style.left = x - 15 + 'px'; el.style.top = y - 30 + 'px';
+      splashLayer.appendChild(el);
+      setTimeout(() => el.remove(), 1100);
+    }
+
+    /* =================================================================
+       CONFETTI
+       ================================================================= */
+    function triggerConfetti() {
+      const colors = ['#00e5ff','#1de9b6','#7c4dff','#ff6d00','#ffeb3b','#f50057','#2979ff','#76ff03'];
+      for (let i = 0; i < 100; i++) {
+        const el = document.createElement('div');
+        el.className = 'conf-p';
+        const sz = Math.random() * 10 + 6;
+        const c = colors[Math.floor(Math.random() * colors.length)];
+        const isCircle = Math.random() > 0.5;
+        const dur = Math.random() * 2 + 2;
+        const rot = Math.random() * 1080 - 540;
+        const delay = Math.random() * 0.8;
+        el.style.cssText = `left:${Math.random()*100}%;width:${sz}px;height:${isCircle?sz:sz*0.6}px;background:${c};border-radius:${isCircle?'50%':'2px'};--dur:${dur}s;--rot:${rot}deg;animation-delay:${delay}s;`;
+        confettiLayer.appendChild(el);
+        setTimeout(() => el.remove(), (dur + delay) * 1000 + 200);
+      }
+    }
+
+    /* =================================================================
+       SOUND
+       ================================================================= */
+    function playClickSound() {
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const o1 = ctx.createOscillator(), g1 = ctx.createGain();
+        o1.connect(g1); g1.connect(ctx.destination);
+        o1.type = 'sine';
+        o1.frequency.setValueAtTime(600, ctx.currentTime);
+        o1.frequency.exponentialRampToValueAtTime(1200, ctx.currentTime + 0.08);
+        o1.frequency.exponentialRampToValueAtTime(800, ctx.currentTime + 0.15);
+        g1.gain.setValueAtTime(0.12, ctx.currentTime);
+        g1.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
+        o1.start(ctx.currentTime); o1.stop(ctx.currentTime + 0.2);
+
+        const o2 = ctx.createOscillator(), g2 = ctx.createGain();
+        o2.connect(g2); g2.connect(ctx.destination);
+        o2.type = 'sine';
+        o2.frequency.setValueAtTime(1400, ctx.currentTime + 0.05);
+        o2.frequency.exponentialRampToValueAtTime(600, ctx.currentTime + 0.18);
+        g2.gain.setValueAtTime(0.08, ctx.currentTime + 0.05);
+        g2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
+        o2.start(ctx.currentTime + 0.05); o2.stop(ctx.currentTime + 0.25);
+      } catch {}
+    }
+
+    /* =================================================================
+       BACKGROUND BUBBLES
+       ================================================================= */
+    function spawnBubble() {
+      const b = document.createElement('div');
+      b.className = 'bub';
+      const sz = Math.random() * 30 + 10;
+      const dur = Math.random() * 10 + 10;
+      const drift = (Math.random() - 0.5) * 100;
+      b.style.cssText = `width:${sz}px;height:${sz}px;left:${Math.random()*100}%;bottom:-${sz}px;--drift:${drift}px;animation-duration:${dur}s;animation-delay:${Math.random()*5}s;`;
+      $('bubbles').appendChild(b);
+      setTimeout(() => b.remove(), (dur + 6) * 1000);
+    }
+    setInterval(spawnBubble, 2000);
+    for (let i = 0; i < 6; i++) setTimeout(spawnBubble, i * 400);
+
+    /* =================================================================
+       MIDNIGHT RESET
+       ================================================================= */
+    let lastDate = todayStr();
+    function startMidnightCheck() {
+      setInterval(() => {
+        const now = todayStr();
+        if (now !== lastDate) {
+          lastDate = now;
+          count = 0;
+          updateUI(false);
+          goalGlow.classList.remove('on');
+          if (mode === 'tracker') upsertCount();
+        }
+      }, 60000);
+    }
+  </script>
+</body>
+</html>
