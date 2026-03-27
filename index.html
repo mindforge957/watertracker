@@ -461,16 +461,16 @@
       return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
     }
 
-    function generateId() {
-      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-      let id = 'W-';
-      for (let i = 0; i < 6; i++) id += chars[Math.floor(Math.random() * chars.length)];
-      return id;
-    }
-
     function getUserId() {
       let uid = localStorage.getItem(LS_UID_KEY);
-      if (!uid) { uid = generateId(); localStorage.setItem(LS_UID_KEY, uid); }
+      if (!uid) { 
+        uid = prompt("Welcome! Please enter a unique Name or ID to track your water:");
+        if (!uid || uid.trim() === '') {
+          uid = "Anonymous-" + Math.floor(Math.random() * 10000);
+        }
+        uid = uid.trim().toUpperCase();
+        localStorage.setItem(LS_UID_KEY, uid); 
+      }
       return uid;
     }
 
@@ -518,6 +518,17 @@
     /* =================================================================
        MODE SELECTION
        ================================================================= */
+    window.addEventListener('DOMContentLoaded', () => {
+      const params = new URLSearchParams(window.location.search);
+      if (params.has('user')) {
+        const urlUser = params.get('user').trim().toUpperCase();
+        if (urlUser) {
+          viewerIdInput.value = urlUser;
+          connectViewer();
+        }
+      }
+    });
+
     pickTracker.addEventListener('click', () => {
       mode = 'tracker';
       userId = getUserId();
@@ -543,10 +554,10 @@
       if (supabaseReady) {
         // Check if user exists in DB for today
         const { data, error } = await sb
-          .from('water_log')
+          .from('water_tracker')
           .select('count')
           .eq('user_id', val)
-          .eq('log_date', todayStr())
+          .eq('date', todayStr())
           .maybeSingle();
 
         if (error) {
@@ -640,10 +651,10 @@
 
       setSyncStatus('loading');
       const { data, error } = await sb
-        .from('water_log')
+        .from('water_tracker')
         .select('count')
         .eq('user_id', userId)
-        .eq('log_date', todayStr())
+        .eq('date', todayStr())
         .maybeSingle();
 
       if (error) { setSyncStatus('error'); return; }
@@ -660,13 +671,13 @@
       }
 
       const { error } = await sb
-        .from('water_log')
+        .from('water_tracker')
         .upsert({
           user_id: userId,
-          log_date: todayStr(),
+          date: todayStr(),
           count: count,
           updated_at: new Date().toISOString()
-        }, { onConflict: 'user_id,log_date' });
+        }, { onConflict: 'user_id,date' });
 
       if (error) { console.error('Upsert error:', error); setSyncStatus('error'); }
     }
@@ -681,12 +692,12 @@
           {
             event: '*',
             schema: 'public',
-            table: 'water_log',
+            table: 'water_tracker',
             filter: `user_id=eq.${userId}`
           },
           (payload) => {
             const row = payload.new;
-            if (row && row.log_date === todayStr()) {
+            if (row && row.date === todayStr()) {
               const oldCount = count;
               count = row.count;
               updateUI(count > oldCount);
